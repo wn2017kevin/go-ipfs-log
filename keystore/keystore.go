@@ -2,6 +2,7 @@
 package keystore // import "berty.tech/go-ipfs-log/keystore"
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 
@@ -13,6 +14,7 @@ import (
 )
 
 type Keystore struct {
+	ctx context.Context
 	store datastore.Datastore
 	cache *lru.Cache
 }
@@ -37,13 +39,14 @@ func (k *Keystore) Verify(signature []byte, publicKey crypto.PubKey, data []byte
 }
 
 // NewKeystore creates a new keystore.
-func NewKeystore(store datastore.Datastore) (*Keystore, error) {
+func NewKeystore(ctx context.Context,store datastore.Datastore) (*Keystore, error) {
 	cache, err := lru.New(128)
 	if err != nil {
 		return nil, errmsg.ErrKeyStoreInitFailed.Wrap(err)
 	}
 
 	return &Keystore{
+		ctx: ctx,
 		store: store,
 		cache: cache,
 	}, nil
@@ -54,7 +57,7 @@ func (k *Keystore) HasKey(id string) (bool, error) {
 	storedKey, ok := k.cache.Peek(id)
 
 	if ok == false {
-		value, err := k.store.Get(datastore.NewKey(id))
+		value, err := k.store.Get(k.ctx, datastore.NewKey(id))
 		if err != nil {
 			return false, errmsg.ErrKeyNotInKeystore.Wrap(err)
 		}
@@ -80,7 +83,7 @@ func (k *Keystore) CreateKey(id string) (crypto.PrivKey, error) {
 		return nil, errmsg.ErrInvalidPrivKeyFormat.Wrap(err)
 	}
 
-	if err := k.store.Put(datastore.NewKey(id), keyBytes); err != nil {
+	if err := k.store.Put(k.ctx, datastore.NewKey(id), keyBytes); err != nil {
 		return nil, errmsg.ErrKeyStorePutFailed.Wrap(err)
 	}
 
@@ -96,7 +99,7 @@ func (k *Keystore) GetKey(id string) (crypto.PrivKey, error) {
 
 	cachedKey, ok := k.cache.Get(id)
 	if !ok || cachedKey == nil {
-		keyBytes, err = k.store.Get(datastore.NewKey(id))
+		keyBytes, err = k.store.Get(k.ctx,datastore.NewKey(id))
 
 		if err != nil {
 			return nil, errmsg.ErrKeyNotInKeystore.Wrap(err)
